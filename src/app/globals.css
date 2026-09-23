@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-vazir: "Vazirmatn", "Tahoma", sans-serif;
+}
+
+html,
+body {
+  font-family: var(--font-vazir);
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(51, 144, 255, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 100%, rgba(28, 115, 245, 0.06), transparent 60%),
+    #f6f8fb;
+}
+
+/* Persian numerals utility */
+.num-fa {
+  font-feature-settings: "ss01" on;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Table styles */
+.table-clean thead th {
+  @apply text-xs font-medium text-slate-500 uppercase tracking-wide text-right px-4 py-3 border-b border-surface-border bg-surface-muted/40;
+}
+.table-clean tbody td {
+  @apply text-sm text-slate-700 px-4 py-3 border-b border-surface-border/70 align-middle;
+}
+.table-clean tbody tr:hover {
+  @apply bg-brand-50/40;
+}
+
+/* Focus rings — accessible */
+:focus-visible {
+  outline: 2px solid #3390ff;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Utility */
+.card {
+  @apply bg-surface-card border border-surface-border rounded-xl2 shadow-soft;
+}
+.section-title {
+  @apply text-lg font-bold text-slate-800;
+}
+.subtle {
+  @apply text-slate-500 text-sm;
+}
+.chip {
+  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium;
+}
+.chip-green { @apply chip bg-emerald-50 text-emerald-700 border border-emerald-200; }
+.chip-red   { @apply chip bg-rose-50 text-rose-700 border border-rose-200; }
+.chip-blue  { @apply chip bg-brand-50 text-brand-700 border border-brand-200; }
+.chip-amber { @apply chip bg-amber-50 text-amber-700 border border-amber-200; }
+.chip-slate { @apply chip bg-slate-100 text-slate-700 border border-slate-200; }
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition select-none active:scale-[.98];
+}
+.btn-primary   { @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-pop; }
+.btn-secondary { @apply btn bg-white text-slate-700 border border-surface-border hover:bg-surface-muted; }
+.btn-danger    { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
+.btn-ghost     { @apply btn bg-transparent text-slate-600 hover:bg-surface-muted; }
+
+.input {
+  @apply w-full bg-white border border-surface-border rounded-xl px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none transition;
+}
+.label { @apply block text-xs font-medium text-slate-600 mb-1.5; }
+
+/* POS-specific */
+.pos-grid-btn {
+  @apply relative flex flex-col items-start justify-between p-3 h-24 rounded-xl bg-white border border-surface-border hover:border-brand-300 hover:shadow-soft text-right transition active:scale-[.98];
+}
+
+/* Blink for live indicators */
+@keyframes pulseDot {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(1.35); }
+}
+.live-dot::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #10b981;
+  display: inline-block;
+  margin-left: .5rem;
+  animation: pulseDot 1.6s ease-in-out infinite;
+}
