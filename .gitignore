@@ -1,18 +1,30 @@
 # dependencies
 node_modules/
+frontend/node_modules/
 .pnp
 .pnp.js
 .yarn/install-state.gz
 
+# next.js
+frontend/.next/
+frontend/out/
+
+# builds
+/build
+
+# env files
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+frontend/.env
+backend/.env
+
 # testing
 /coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
+.pytest_cache/
+.coverage
+htmlcov/
 
 # misc
 .DS_Store
@@ -24,13 +36,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env
-.env*.local
-.env
-
 # typescript
 *.tsbuildinfo
-next-env.d.ts.bak
+frontend/next-env.d.ts.bak
 
 # vercel
 .vercel
@@ -43,5 +51,5 @@ next-env.d.ts.bak
 __pycache__/
 *.py[cod]
 backend/.venv/
-backend/.env
+backend/venv/
 backend/*.sqlite3

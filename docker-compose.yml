@@ -1,5 +1,18 @@
 version: "3.9"
 
+# All-in-one dev stack for CashRegister:
+#   - MySQL 8 (data persisted in a named volume)
+#   - phpMyAdmin (http://localhost:8080)
+#   - FastAPI backend (http://localhost:8000, docs at /docs)
+#   - Next.js frontend (http://localhost:3000)
+#
+# Bring up everything:
+#   docker compose up -d --build
+# Stop:
+#   docker compose down
+# Wipe data (reset DB) — WARNING: deletes MySQL volume:
+#   docker compose down -v
+
 services:
   mysql:
     image: mysql:8.0
@@ -23,7 +36,7 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   phpmyadmin:
     image: phpmyadmin:5.2
@@ -42,7 +55,7 @@ services:
         condition: service_healthy
 
   api:
-    build: .
+    build: ./backend
     container_name: cashregister-api
     restart: unless-stopped
     environment:
@@ -56,9 +69,20 @@ services:
       mysql:
         condition: service_healthy
     volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./scripts:/app/scripts
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/scripts:/app/scripts
+
+  frontend:
+    build: ./frontend
+    container_name: cashregister-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
 
 volumes:
   mysql_data:

@@ -7,9 +7,35 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { mockHandle } from "@/lib/mock-backend";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1").replace(/\/$/, "");
 const TOKEN_KEY = "cr_token";
+const DEMO_KEY = "cr_demo_mode";
+
+function readDemo(): boolean {
+  if (typeof window === "undefined") return false;
+  try { return window.localStorage.getItem(DEMO_KEY) === "1"; } catch { return false; }
+}
+function writeDemo(on: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    if (on) window.localStorage.setItem(DEMO_KEY, "1");
+    else window.localStorage.removeItem(DEMO_KEY);
+  } catch { /* ignore */ }
+}
+
+let demoMode = false;
+if (typeof window !== "undefined") demoMode = readDemo();
+
+export function isDemoMode(): boolean { return demoMode; }
+
+export function setDemoMode(on: boolean) {
+  demoMode = on;
+  writeDemo(on);
+  // Notify every useApi() subscriber to refetch through the new backend.
+  if (typeof window !== "undefined") bus.dispatchEvent(new Event("demo"));
+}
 
 // -----------------------------------------------------------------------------
 // Token & fetch
@@ -45,7 +71,19 @@ export class ApiError extends Error {
 
 type FetchOpts = RequestInit & { skipAuth?: boolean };
 
+async function callMock<T>(path: string, opts: FetchOpts): Promise<T> {
+  try {
+    return await mockHandle<T>(path, opts);
+  } catch (e) {
+    const err = e as { status?: number; detail?: string; message?: string };
+    throw new ApiError(err.message ?? "Mock error", err.status ?? 500, err.detail);
+  }
+}
+
 export async function apiFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
+  // In demo mode, everything goes to the client-side mock.
+  if (demoMode) return callMock<T>(path, opts);
+
   const headers = new Headers(opts.headers);
   if (!headers.has("Content-Type") && opts.body) headers.set("Content-Type", "application/json");
   const token = opts.skipAuth ? null : getToken();
@@ -55,7 +93,11 @@ export async function apiFetch<T>(path: string, opts: FetchOpts = {}): Promise<T
   try {
     res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "omit" });
   } catch (e) {
-    throw new ApiError((e as Error).message || "Network error", 0);
+    // Real backend unreachable — auto-switch to demo and satisfy this call.
+    setDemoMode(true);
+    // eslint-disable-next-line no-console
+    console.info("[cr] Real backend unreachable — switched to demo mode (localStorage-backed).");
+    return callMock<T>(path, opts);
   }
   const ct = res.headers.get("content-type") ?? "";
   const isJson = ct.includes("application/json");
@@ -349,42 +391,50 @@ export function useApi<T>(
 // Health probe — lightweight app-wide indicator
 // -----------------------------------------------------------------------------
 
-export function useApiHealth(): { online: boolean; me: Me | null } {
+export function useApiHealth(): { online: boolean; demo: boolean; me: Me | null } {
   const [online, setOnline] = useState(false);
+  const [demo, setDemo] = useState(isDemoMode());
   const [me, setMe] = useState<Me | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function probe() {
-      try {
+      const inDemo = isDemoMode();
+      setDemo(inDemo);
+      if (inDemo) {
+        // In demo mode, we always resolve "online-ish" through the mock.
         const meRes = await tryFetch<Me>("/auth/me");
         if (cancelled) return;
-        if (meRes) {
-          setOnline(true);
-          setMe(meRes);
-        } else {
-          // no valid token yet — check raw health
-          const h = await fetch(`${BASE.replace(/\/api\/v1$/, "")}/health`).catch(() => null);
-          if (cancelled) return;
-          setOnline(!!h && h.ok);
-          setMe(null);
-        }
-      } catch {
-        if (!cancelled) { setOnline(false); setMe(null); }
+        setOnline(false);       // real server is not online
+        setMe(meRes ?? null);
+        return;
       }
+      try {
+        const h = await fetch(`${BASE.replace(/\/api\/v1$/, "")}/health`).catch(() => null);
+        if (cancelled) return;
+        setOnline(!!h && h.ok);
+      } catch {
+        if (!cancelled) setOnline(false);
+      }
+      const meRes = await tryFetch<Me>("/auth/me");
+      if (cancelled) return;
+      setMe(meRes ?? null);
     }
     probe();
     const onAuth = () => probe();
+    const onDemo = () => probe();
     bus.addEventListener("auth", onAuth);
+    bus.addEventListener("demo", onDemo);
     const interval = window.setInterval(probe, 30_000);
     return () => {
       cancelled = true;
       bus.removeEventListener("auth", onAuth);
+      bus.removeEventListener("demo", onDemo);
       window.clearInterval(interval);
     };
   }, []);
 
-  return { online, me };
+  return { online, demo, me };
 }
 
 // -----------------------------------------------------------------------------
