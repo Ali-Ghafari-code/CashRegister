@@ -1,7 +1,13 @@
 """Block until the database accepts connections. Used by the Docker entrypoint."""
 from __future__ import annotations
 
-import sys
+# --- Make `app` importable when this file is run directly (not as -m) ---
+import os, sys
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_ROOT = os.path.dirname(_HERE)
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
+
 import time
 
 from sqlalchemy import text

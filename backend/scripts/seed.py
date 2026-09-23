@@ -1,8 +1,19 @@
 """Seed the database with a minimal Persian-language dataset.
 
 Idempotent: only inserts rows when the tables are still empty.
+
+Can be invoked either way:
+    python -m scripts.seed         (from the backend/ directory)
+    python .\\scripts\\seed.py       (direct — sys.path bootstrap below)
 """
 from __future__ import annotations
+
+# --- Make `app` importable when this file is run directly (not as -m) ---
+import os, sys
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_BACKEND_ROOT = os.path.dirname(_HERE)
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 from decimal import Decimal
 from typing import List, Tuple
