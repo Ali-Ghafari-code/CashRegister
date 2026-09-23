@@ -24,6 +24,9 @@ import {
   FileText,
   ClipboardList,
   CreditCard,
+  UtensilsCrossed,
+  ChefHat,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +36,10 @@ const nav: Item[] = [
   { href: "/dashboard", label: "داشبورد اجرایی", icon: LayoutDashboard, group: "خلاصه" },
   { href: "/dashboard/sales", label: "فروش‌ها", icon: ScanBarcode, group: "خلاصه" },
   { href: "/dashboard/reports", label: "گزارش‌ها", icon: BarChart3, group: "خلاصه" },
+
+  { href: "/dashboard/tables", label: "میزها و سالن‌ها", icon: UtensilsCrossed, group: "رستوران و کافه" },
+  { href: "/dashboard/kitchen", label: "نمایشگر آشپزخانه (KDS)", icon: ChefHat, group: "رستوران و کافه" },
+  { href: "/dashboard/menu", label: "منو و افزودنی‌ها", icon: BookOpen, group: "رستوران و کافه" },
 
   { href: "/dashboard/products", label: "کالاها و کاتالوگ", icon: Package, group: "محصول و انبار" },
   { href: "/dashboard/inventory", label: "موجودی انبار", icon: Warehouse, group: "محصول و انبار" },

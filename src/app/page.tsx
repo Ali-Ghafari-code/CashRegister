@@ -9,15 +9,21 @@ import {
   Users,
   BadgePercent,
   ArrowLeft,
+  UtensilsCrossed,
+  ChefHat,
+  BookOpen,
 } from "lucide-react";
 import { jalaliToday } from "@/lib/utils";
 
 const features = [
   { icon: Zap, title: "چک‌اوت فوق‌سریع", text: "اسکن، اسکن، اسکن، پرداخت. صندوقدار حرفه‌ای بدون ماوس." },
+  { icon: UtensilsCrossed, title: "مدیریت میز و سالن رستوران", text: "چیدمان زنده سالن، رزرو، انتقال میز، ظرفیت و زمان اشغال." },
+  { icon: ChefHat, title: "نمایشگر آشپزخانه (KDS)", text: "تیکت لحظه‌ای، ایستگاه‌های گریل/کافه/پیتزا/دسر، اولویت VIP و فوری." },
   { icon: Wifi, title: "کارکرد آفلاین", text: "قطع اینترنت مانع فروش نیست؛ همگام‌سازی خودکار پس از اتصال." },
   { icon: Boxes, title: "مدیریت انبار سازمانی", text: "چند شعبه، سریال، بچ، انقضا، انتقال بین شعب و شمارش موجودی." },
   { icon: Users, title: "CRM و باشگاه مشتریان", text: "نمایه ۳۶۰ درجه، امتیاز وفاداری، اعتبار مشتری، کوپن و کارت هدیه." },
   { icon: BadgePercent, title: "موتور تخفیف و پروموشن", text: "قواعد ترکیبی، محدودیت زمان و مکان، سبد، مشتری و اولویت‌بندی." },
+  { icon: BookOpen, title: "منوی رستوران و کافه", text: "سایز، افزودنی، شیر بادام/جو، شات اضافه، درجه پختگی و روتینگ ایستگاه." },
   { icon: ShieldCheck, title: "امنیت و حسابرسی", text: "سطح دسترسی دقیق، تأیید مدیر، لاگ رخداد و ژورنال الکترونیکی." },
 ];
 
@@ -71,6 +77,37 @@ export default function HomePage() {
               </Link>
               <Link href="/login" className="btn-ghost text-base px-5 py-3">
                 ورود کاربران →
+              </Link>
+            </div>
+
+            {/* Restaurant / Cafe quick links */}
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Link href="/dashboard/tables" className="card p-3 flex items-center gap-3 hover:border-brand-300 transition">
+                <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 grid place-items-center">
+                  <UtensilsCrossed className="w-4 h-4" />
+                </div>
+                <div className="text-sm">
+                  <div className="font-semibold text-slate-800">میزها و سالن‌ها</div>
+                  <div className="text-[11px] text-slate-500">چیدمان زنده، رزرو، انتقال</div>
+                </div>
+              </Link>
+              <Link href="/dashboard/kitchen" className="card p-3 flex items-center gap-3 hover:border-brand-300 transition">
+                <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-700 grid place-items-center">
+                  <ChefHat className="w-4 h-4" />
+                </div>
+                <div className="text-sm">
+                  <div className="font-semibold text-slate-800">نمایشگر آشپزخانه</div>
+                  <div className="text-[11px] text-slate-500">تیکت‌های زنده و ایستگاه‌ها</div>
+                </div>
+              </Link>
+              <Link href="/dashboard/menu" className="card p-3 flex items-center gap-3 hover:border-brand-300 transition">
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div className="text-sm">
+                  <div className="font-semibold text-slate-800">منوی رستوران/کافه</div>
+                  <div className="text-[11px] text-slate-500">سایز، افزودنی، شیر و شات</div>
+                </div>
               </Link>
             </div>
 
