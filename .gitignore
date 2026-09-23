@@ -38,3 +38,10 @@ next-env.d.ts.bak
 # IDE
 .idea/
 .vscode/
+
+# Python (backend)
+__pycache__/
+*.py[cod]
+backend/.venv/
+backend/.env
+backend/*.sqlite3

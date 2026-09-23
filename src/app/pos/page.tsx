@@ -37,6 +37,7 @@ import {
   type Product,
 } from "@/lib/mock-data";
 import { cn, formatToman, toFa, jalaliToday } from "@/lib/utils";
+import { tryFetch, api, getToken } from "@/lib/api";
 
 type Line = {
   product: Product;
@@ -48,11 +49,39 @@ type Line = {
 export default function PosPage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("همه");
+  const [products, setProducts] = useState<Product[]>(productsData);
+  const [apiOnline, setApiOnline] = useState<boolean>(false);
   const [lines, setLines] = useState<Line[]>([
     { product: productsData[0], qty: 2, discountPercent: 0 },
     { product: productsData[3], qty: 1, discountPercent: 0 },
     { product: productsData[16], qty: 3, discountPercent: 5 },
   ]);
+
+  // Try to load products from the backend; fall back to mock data if unavailable.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const data = await tryFetch<{ items: any[] }>(`/products?size=200`);
+      if (cancelled || !data?.items?.length) return;
+      const mapped: Product[] = data.items.map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        sku: p.sku,
+        barcode: p.barcodes?.[0]?.code ?? p.sku,
+        category: p.category?.name ?? "همه",
+        brand: p.brand?.name ?? "",
+        price: Number(p.price ?? 0),
+        cost: Number(p.cost ?? 0),
+        stock: Number(p.stock ?? 0),
+        unit: p.unit ?? "عدد",
+        emoji: p.emoji ?? "📦",
+        weighted: !!p.is_weighted,
+      }));
+      setProducts(mapped);
+      setApiOnline(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [invoiceDiscount, setInvoiceDiscount] = useState(0);
   const [customer, setCustomer] = useState<string>("مهمان");
   const [payOpen, setPayOpen] = useState(false);
@@ -74,7 +103,7 @@ export default function PosPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    return productsData.filter((p) => {
+    return products.filter((p) => {
       const inCat = category === "همه" || p.category === category;
       if (!inCat) return false;
       if (!q) return true;
@@ -85,7 +114,7 @@ export default function PosPage() {
         p.brand.includes(q)
       );
     });
-  }, [query, category]);
+  }, [query, category, products]);
 
   const addProduct = useCallback((p: Product) => {
     setLines((prev) => {
@@ -158,7 +187,9 @@ export default function PosPage() {
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="chip chip-green live-dot">آنلاین</span>
+          <span className={apiOnline ? "chip chip-green live-dot" : "chip chip-amber"}>
+            {apiOnline ? "متصل به سرور" : "حالت آفلاین / نمونه"}
+          </span>
           <span className="chip chip-slate flex items-center gap-1"><Wifi className="w-3.5 h-3.5" /> سرور همگام</span>
           <span className="chip chip-slate num-fa"><Clock className="w-3.5 h-3.5 ms-1" /> {nowStr}</span>
           <span className="chip chip-blue num-fa">{jalaliToday()}</span>

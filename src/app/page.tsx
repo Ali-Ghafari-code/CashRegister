@@ -69,6 +69,9 @@ export default function HomePage() {
                 <LayoutDashboard className="w-5 h-5" />
                 پنل مدیریت
               </Link>
+              <Link href="/login" className="btn-ghost text-base px-5 py-3">
+                ورود کاربران →
+              </Link>
             </div>
 
             <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4">
