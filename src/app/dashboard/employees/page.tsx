@@ -1,17 +1,29 @@
+"use client";
+
 import { TopBar } from "@/components/admin/top-bar";
-import { employees } from "@/lib/mock-data";
-import { UserPlus, Fingerprint, KeyRound } from "lucide-react";
+import { api, useApi } from "@/lib/api";
+import { UserPlus, Fingerprint, AlertCircle } from "lucide-react";
 import { toFa } from "@/lib/utils";
 
 export default function EmployeesPage() {
+  const { data: employees, offline, loading, refetch } = useApi("employees", () => api.listEmployees(), []);
+  const { data: branches } = useApi("branches", () => api.listBranches(), []);
+  const branchMap = new Map((branches ?? []).map((b) => [b.id, b.name] as const));
+
   return (
     <>
-      <TopBar title="کارکنان" description="مدیریت پرسنل، نقش‌ها، PIN ورود و شیفت روزانه" />
+      <TopBar title="کارکنان" description="لیست پرسنل ثبت‌شده در بک‌اند" />
       <div className="p-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
+        {offline && (
+          <div className="card p-4 bg-amber-50 border-amber-200 flex items-center gap-3 text-amber-800">
+            <AlertCircle className="w-5 h-5" />
+            <div className="flex-1 text-sm">اتصال به بک‌اند برقرار نیست.</div>
+            <button className="btn-secondary" onClick={() => refetch()}>تلاش مجدد</button>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
           <div className="flex-1" />
-          <button className="btn-secondary"><KeyRound className="w-4 h-4" /> بازنشانی PIN گروهی</button>
-          <button className="btn-primary"><UserPlus className="w-4 h-4" /> کارمند جدید</button>
+          <button className="btn-primary" disabled><UserPlus className="w-4 h-4" /> کارمند جدید</button>
         </div>
 
         <div className="card overflow-hidden">
@@ -23,30 +35,28 @@ export default function EmployeesPage() {
                   <th>نقش</th>
                   <th>شعبه</th>
                   <th>وضعیت</th>
-                  <th>PIN</th>
-                  <th>شیفت امروز</th>
-                  <th></th>
+                  <th>موبایل</th>
+                  <th>کد</th>
                 </tr>
               </thead>
               <tbody>
-                {employees.map((e) => (
+                {loading && <tr><td colSpan={6} className="text-center text-slate-400 py-8">در حال بارگذاری...</td></tr>}
+                {!loading && (employees?.length ?? 0) === 0 && (
+                  <tr><td colSpan={6} className="text-center text-slate-400 py-8">کارمندی یافت نشد.</td></tr>
+                )}
+                {(employees ?? []).map((e) => (
                   <tr key={e.id}>
                     <td>
                       <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-700 grid place-items-center font-bold">{e.name.charAt(0)}</div>
-                        <div className="font-semibold text-slate-800">{e.name}</div>
+                        <div className="w-9 h-9 rounded-full bg-brand-50 text-brand-700 grid place-items-center font-bold">{e.full_name.charAt(0)}</div>
+                        <div className="font-semibold text-slate-800">{e.full_name}</div>
                       </div>
                     </td>
-                    <td><span className="chip-blue">{e.role}</span></td>
-                    <td>{e.branch}</td>
-                    <td>
-                      {e.status === "فعال"
-                        ? <span className="chip-green">فعال</span>
-                        : <span className="chip-slate">غیرفعال</span>}
-                    </td>
-                    <td className="num-fa flex items-center gap-2"><Fingerprint className="w-3.5 h-3.5 text-slate-400" /> {e.pin}</td>
-                    <td className="num-fa">{e.todayShift ?? <span className="text-slate-400">—</span>}</td>
-                    <td className="!text-left"><button className="btn-ghost text-xs">ویرایش</button></td>
+                    <td><span className="chip-blue">{e.role_title}</span></td>
+                    <td>{e.branch_id ? branchMap.get(e.branch_id) ?? "—" : "—"}</td>
+                    <td>{e.is_active ? <span className="chip-green">فعال</span> : <span className="chip-slate">غیرفعال</span>}</td>
+                    <td className="num-fa">{e.phone ?? "—"}</td>
+                    <td className="num-fa flex items-center gap-1"><Fingerprint className="w-3.5 h-3.5 text-slate-400" /> {e.code}</td>
                   </tr>
                 ))}
               </tbody>
@@ -55,9 +65,9 @@ export default function EmployeesPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Card title="کل کارکنان" value={toFa(184)} />
-          <Card title="شیفت‌های باز" value={toFa(23)} />
-          <Card title="تأخیر امروز" value={toFa(3)} />
+          <Card title="کل کارکنان" value={toFa(employees?.length ?? 0)} />
+          <Card title="فعال" value={toFa((employees ?? []).filter((e) => e.is_active).length)} />
+          <Card title="شعب" value={toFa(branches?.length ?? 0)} />
         </div>
       </div>
     </>

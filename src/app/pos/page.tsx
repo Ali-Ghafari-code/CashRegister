@@ -3,41 +3,16 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  ScanBarcode,
-  Search,
-  Plus,
-  Minus,
-  Trash2,
-  PauseCircle,
-  UserRound,
-  BadgePercent,
-  Banknote,
-  CreditCard,
-  Wallet,
-  Gift,
-  QrCode,
-  Printer,
-  RotateCcw,
-  Keyboard,
-  Settings2,
-  ArrowLeft,
-  Boxes,
-  X,
-  Check,
-  LayoutGrid,
-  Star,
-  Clock,
-  ShieldAlert,
-  Wifi,
+  ScanBarcode, Search, Plus, Minus, Trash2, PauseCircle, UserRound,
+  BadgePercent, Banknote, CreditCard, Wallet, Gift, QrCode, Printer,
+  RotateCcw, Keyboard, Settings2, ArrowLeft, Boxes, X, Check, LayoutGrid,
+  Star, Clock, ShieldAlert, Wifi, CheckCircle2, AlertCircle,
 } from "lucide-react";
-import {
-  products as productsData,
-  CATEGORIES,
-  heldCarts,
-  type Product,
-} from "@/lib/mock-data";
+import { products as mockProducts, CATEGORIES, heldCarts, type Product } from "@/lib/mock-data";
 import { cn, formatToman, toFa, jalaliToday } from "@/lib/utils";
-import { tryFetch, api, getToken } from "@/lib/api";
+import {
+  api, useApi, invalidate, toNumber, newClientUid, type ApiProduct,
+} from "@/lib/api";
 
 type Line = {
   product: Product;
@@ -46,48 +21,50 @@ type Line = {
   note?: string;
 };
 
+function mapApiProduct(p: ApiProduct): Product {
+  return {
+    id: String(p.id),
+    name: p.name,
+    sku: p.sku,
+    barcode: p.barcodes?.[0]?.code ?? p.sku,
+    category: "همه", // simplified — API sends category by id
+    brand: "",
+    price: toNumber(p.price),
+    cost: toNumber(p.cost),
+    stock: toNumber(p.stock ?? 0),
+    unit: p.unit,
+    emoji: p.emoji ?? "📦",
+    weighted: !!p.is_weighted,
+  };
+}
+
 export default function PosPage() {
+  // --- fetch products from backend, fall back to mock -----------------------
+  const { data: productsPage, offline, loading } = useApi(
+    "products",
+    () => api.listProducts({ size: 200 }),
+  );
+
+  const products: Product[] = useMemo(() => {
+    if (productsPage?.items?.length) return productsPage.items.map(mapApiProduct);
+    return mockProducts;
+  }, [productsPage]);
+
+  // --- fetch branches to know which branch id to POST -----------------------
+  const { data: branches } = useApi("branches", () => api.listBranches(), []);
+  const branchId = branches?.[0]?.id ?? 1;
+
+  // --- state ----------------------------------------------------------------
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("همه");
-  const [products, setProducts] = useState<Product[]>(productsData);
-  const [apiOnline, setApiOnline] = useState<boolean>(false);
-  const [lines, setLines] = useState<Line[]>([
-    { product: productsData[0], qty: 2, discountPercent: 0 },
-    { product: productsData[3], qty: 1, discountPercent: 0 },
-    { product: productsData[16], qty: 3, discountPercent: 5 },
-  ]);
-
-  // Try to load products from the backend; fall back to mock data if unavailable.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const data = await tryFetch<{ items: any[] }>(`/products?size=200`);
-      if (cancelled || !data?.items?.length) return;
-      const mapped: Product[] = data.items.map((p) => ({
-        id: String(p.id),
-        name: p.name,
-        sku: p.sku,
-        barcode: p.barcodes?.[0]?.code ?? p.sku,
-        category: p.category?.name ?? "همه",
-        brand: p.brand?.name ?? "",
-        price: Number(p.price ?? 0),
-        cost: Number(p.cost ?? 0),
-        stock: Number(p.stock ?? 0),
-        unit: p.unit ?? "عدد",
-        emoji: p.emoji ?? "📦",
-        weighted: !!p.is_weighted,
-      }));
-      setProducts(mapped);
-      setApiOnline(true);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  const [lines, setLines] = useState<Line[]>([]);
   const [invoiceDiscount, setInvoiceDiscount] = useState(0);
   const [customer, setCustomer] = useState<string>("مهمان");
   const [payOpen, setPayOpen] = useState(false);
   const [holdOpen, setHoldOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [nowStr, setNowStr] = useState<string>("");
+  const [toast, setToast] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
     const update = () => {
@@ -101,6 +78,12 @@ export default function PosPage() {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   const filtered = useMemo(() => {
     const q = query.trim();
     return products.filter((p) => {
@@ -111,7 +94,7 @@ export default function PosPage() {
         p.name.includes(q) ||
         p.sku.toLowerCase().includes(q.toLowerCase()) ||
         p.barcode.includes(q) ||
-        p.brand.includes(q)
+        (p.brand ?? "").includes(q)
       );
     });
   }, [query, category, products]);
@@ -144,30 +127,51 @@ export default function PosPage() {
     return { subtotal, discount: discount + invDiscount, tax, total, items: lines.reduce((s, l) => s + l.qty, 0) };
   }, [lines, invoiceDiscount]);
 
+  // --- submit sale ---------------------------------------------------------
+  const finalizeSale = useCallback(async (tenders: { method: string; amount: number }[]) => {
+    if (offline || !branches?.length) {
+      setToast({ kind: "err", text: "بک‌اند در دسترس نیست — فروش فقط در حالت آنلاین ثبت می‌شود." });
+      return false;
+    }
+    try {
+      const uid = newClientUid("pos");
+      const sale = await api.createSale({
+        branch_id: branchId,
+        items: lines.map((l) => ({
+          product_id: Number(l.product.id),
+          quantity: l.qty,
+          discount_percent: l.discountPercent,
+        })),
+        payments: tenders.map((t) => ({ method: t.method, amount: t.amount })),
+        invoice_discount_percent: invoiceDiscount,
+        status: "completed",
+        client_uid: uid,
+      });
+      setToast({ kind: "ok", text: `فاکتور ${sale.invoice_no} ثبت شد.` });
+      setLines([]);
+      setInvoiceDiscount(0);
+      // Trigger every listener in the app to refresh.
+      invalidate("sales", "products", "dashboard", "reports", "inventory");
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "خطای ناشناخته";
+      setToast({ kind: "err", text: "خطا در ثبت فروش: " + msg });
+      return false;
+    }
+  }, [offline, branches, branchId, lines, invoiceDiscount]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "F2") {
-        e.preventDefault();
-        (document.getElementById("pos-search") as HTMLInputElement | null)?.focus();
-      } else if (e.key === "F4") {
-        e.preventDefault();
-        setPayOpen(true);
-      } else if (e.key === "F6") {
-        e.preventDefault();
-        setHoldOpen(true);
-      } else if (e.key === "F1") {
-        e.preventDefault();
-        setShortcutsOpen(true);
-      } else if (e.key === "Escape") {
-        setPayOpen(false);
-        setHoldOpen(false);
-        setShortcutsOpen(false);
-      }
+      if (e.key === "F2") { e.preventDefault(); (document.getElementById("pos-search") as HTMLInputElement | null)?.focus(); }
+      else if (e.key === "F4") { e.preventDefault(); if (lines.length) setPayOpen(true); }
+      else if (e.key === "F6") { e.preventDefault(); setHoldOpen(true); }
+      else if (e.key === "F1") { e.preventDefault(); setShortcutsOpen(true); }
+      else if (e.key === "Escape") { setPayOpen(false); setHoldOpen(false); setShortcutsOpen(false); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [lines.length]);
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col">
@@ -181,39 +185,42 @@ export default function PosPage() {
             <ScanBarcode className="w-4 h-4" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-bold text-slate-900">صندوق ۱ — شعبه مرکزی تهران</div>
-            <div className="text-[11px] text-slate-500 num-fa">شیفت باز از ۰۸:۰۰ · صندوقدار: رضا مرادی</div>
+            <div className="text-sm font-bold text-slate-900">
+              صندوق ۱ — {branches?.[0]?.name ?? "شعبه مرکزی"}
+            </div>
+            <div className="text-[11px] text-slate-500 num-fa">
+              {loading ? "در حال بارگذاری کالاها..." : `${toFa(products.length)} کالای فعال`}
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className={apiOnline ? "chip chip-green live-dot" : "chip chip-amber"}>
-            {apiOnline ? "متصل به سرور" : "حالت آفلاین / نمونه"}
-          </span>
-          <span className="chip chip-slate flex items-center gap-1"><Wifi className="w-3.5 h-3.5" /> سرور همگام</span>
+          {offline
+            ? <span className="chip chip-amber">حالت نمونه (آفلاین)</span>
+            : <span className="chip chip-green live-dot">متصل به سرور</span>}
+          <span className="chip chip-slate flex items-center gap-1"><Wifi className="w-3.5 h-3.5" /> {branches?.length ? `${toFa(branches.length)} شعبه` : "—"}</span>
           <span className="chip chip-slate num-fa"><Clock className="w-3.5 h-3.5 ms-1" /> {nowStr}</span>
           <span className="chip chip-blue num-fa">{jalaliToday()}</span>
           <button className="btn-ghost !px-2 !py-1.5" title="میانبرها (F1)" onClick={() => setShortcutsOpen(true)}>
             <Keyboard className="w-4 h-4" />
           </button>
-          <button className="btn-ghost !px-2 !py-1.5" title="تنظیمات">
+          <Link href="/dashboard" className="btn-ghost !px-2 !py-1.5" title="پنل مدیریت">
             <Settings2 className="w-4 h-4" />
-          </button>
+          </Link>
         </div>
       </header>
 
       {/* Main split */}
       <div className="flex-1 grid grid-cols-12 gap-0 overflow-hidden">
-        {/* Cart (right side in RTL) */}
+        {/* Cart */}
         <aside className="col-span-5 xl:col-span-4 border-l border-surface-border bg-white flex flex-col">
-          {/* Customer + actions */}
           <div className="p-3 border-b border-surface-border">
             <div className="flex items-center gap-2">
               <div className="flex-1 flex items-center gap-2 bg-surface-muted rounded-xl px-3 py-2">
                 <UserRound className="w-4 h-4 text-slate-500" />
                 <div className="text-sm">
                   <div className="font-semibold text-slate-800">{customer}</div>
-                  <div className="text-[11px] text-slate-500 num-fa">امتیاز وفاداری: ۱۲٬۵۰۰</div>
+                  <div className="text-[11px] text-slate-500">فروش نقدی / پیش‌فرض</div>
                 </div>
                 <button className="ms-auto btn-ghost !px-2 !py-1 text-xs" onClick={() => setCustomer(customer === "مهمان" ? "علی رضایی" : "مهمان")}>
                   تغییر
@@ -228,7 +235,6 @@ export default function PosPage() {
             </div>
           </div>
 
-          {/* Lines */}
           <div className="flex-1 overflow-auto">
             {lines.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm gap-2 p-6 text-center">
@@ -319,7 +325,6 @@ export default function PosPage() {
             </ul>
           </div>
 
-          {/* Totals */}
           <div className="border-t border-surface-border p-3 space-y-2">
             <Row label="جمع اقلام" value={formatToman(totals.subtotal)} />
             <Row label="تخفیف کل" value={"-" + formatToman(totals.discount)} tone="rose" />
@@ -333,22 +338,20 @@ export default function PosPage() {
             </div>
 
             <div className="grid grid-cols-3 gap-2 pt-2">
-              <button className="btn-secondary" onClick={() => setLines([])}>
+              <button className="btn-secondary" onClick={() => setLines([])} disabled={!lines.length}>
                 <X className="w-4 h-4" /> پاک کردن
               </button>
-              <button className="btn-secondary" title="پرینت سفارش پیش‌فاکتور">
+              <button className="btn-secondary" title="پرینت پیش‌فاکتور">
                 <Printer className="w-4 h-4" /> پیش‌فاکتور
               </button>
-              <button className="btn-primary" onClick={() => setPayOpen(true)}>
+              <button className="btn-primary" onClick={() => setPayOpen(true)} disabled={!lines.length}>
                 <Banknote className="w-4 h-4" /> پرداخت
               </button>
             </div>
           </div>
         </aside>
 
-        {/* Product picker */}
         <section className="col-span-7 xl:col-span-8 flex flex-col overflow-hidden">
-          {/* Search bar */}
           <div className="p-4 border-b border-surface-border bg-surface-card">
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -360,11 +363,20 @@ export default function PosPage() {
                   placeholder="اسکن بارکد یا جست‌وجو با نام، کد کالا، برند... (F2)"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && filtered[0]) {
-                      addProduct(filtered[0]);
-                      setQuery("");
+                  onKeyDown={async (e) => {
+                    if (e.key !== "Enter") return;
+                    const q = query.trim();
+                    if (!q) return;
+                    // If we're online, try barcode-lookup first for exact matches.
+                    if (!offline) {
+                      try {
+                        const p = await api.findByBarcode(q);
+                        addProduct(mapApiProduct(p));
+                        setQuery("");
+                        return;
+                      } catch { /* fall through to local */ }
                     }
+                    if (filtered[0]) { addProduct(filtered[0]); setQuery(""); }
                   }}
                 />
               </div>
@@ -397,37 +409,37 @@ export default function PosPage() {
             </div>
           </div>
 
-          {/* Grid */}
           <div className="flex-1 overflow-auto p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-              {filtered.map((p) => (
-                <button key={p.id} className="pos-grid-btn" onClick={() => addProduct(p)}>
-                  <div className="flex items-start justify-between w-full">
-                    <span className="text-2xl">{p.emoji}</span>
-                    {p.stock <= 15 ? (
-                      <span className="chip chip-red !py-0 !px-1.5 !text-[10px]">
-                        موجودی کم
-                      </span>
-                    ) : (
-                      <span className="chip chip-slate !py-0 !px-1.5 !text-[10px] num-fa">
-                        {toFa(p.stock)} {p.unit}
-                      </span>
-                    )}
-                  </div>
-                  <div className="w-full">
-                    <div className="text-[13px] font-semibold text-slate-800 line-clamp-2 leading-5">
-                      {p.name}
+            {loading ? (
+              <div className="text-center text-slate-500 py-10">در حال بارگذاری کالاها...</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                {filtered.map((p) => (
+                  <button key={p.id} className="pos-grid-btn" onClick={() => addProduct(p)}>
+                    <div className="flex items-start justify-between w-full">
+                      <span className="text-2xl">{p.emoji}</span>
+                      {p.stock <= 15 ? (
+                        <span className="chip chip-red !py-0 !px-1.5 !text-[10px]">موجودی کم</span>
+                      ) : (
+                        <span className="chip chip-slate !py-0 !px-1.5 !text-[10px] num-fa">
+                          {toFa(p.stock)} {p.unit}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-500 num-fa">
-                      <span>{p.sku}</span>
-                      <span className="text-brand-700 font-bold">{formatToman(p.price, { withUnit: false })}</span>
+                    <div className="w-full">
+                      <div className="text-[13px] font-semibold text-slate-800 line-clamp-2 leading-5">
+                        {p.name}
+                      </div>
+                      <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-500 num-fa">
+                        <span>{p.sku}</span>
+                        <span className="text-brand-700 font-bold">{formatToman(p.price, { withUnit: false })}</span>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                  </button>
+                ))}
+              </div>
+            )}
 
-            {/* Quick actions */}
             <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
               <QuickTile icon={Star} label="محبوب‌ها" />
               <QuickTile icon={Clock} label="اخیراً فروخته‌شده" />
@@ -438,9 +450,28 @@ export default function PosPage() {
         </section>
       </div>
 
-      {payOpen && <PaymentModal total={totals.total} onClose={() => setPayOpen(false)} />}
+      {payOpen && (
+        <PaymentModal
+          total={totals.total}
+          onClose={() => setPayOpen(false)}
+          onFinalize={async (tenders) => {
+            const ok = await finalizeSale(tenders);
+            if (ok) setPayOpen(false);
+          }}
+        />
+      )}
       {holdOpen && <HeldCartsModal onClose={() => setHoldOpen(false)} />}
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+
+      {toast && (
+        <div className={cn(
+          "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl shadow-pop px-5 py-3 flex items-center gap-3 text-sm",
+          toast.kind === "ok" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white",
+        )}>
+          {toast.kind === "ok" ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          {toast.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -471,25 +502,34 @@ function QuickTile({ icon: Icon, label }: { icon: React.ComponentType<{ classNam
   );
 }
 
-function PaymentModal({ total, onClose }: { total: number; onClose: () => void }) {
-  const [tenders, setTenders] = useState<{ method: string; amount: number; icon: React.ComponentType<{ className?: string }> }[]>([]);
+type Tender = { method: string; amount: number; label: string; icon: React.ComponentType<{ className?: string }> };
+
+function PaymentModal({
+  total, onClose, onFinalize,
+}: {
+  total: number;
+  onClose: () => void;
+  onFinalize: (tenders: { method: string; amount: number }[]) => Promise<void> | void;
+}) {
+  const [tenders, setTenders] = useState<Tender[]>([]);
+  const [busy, setBusy] = useState(false);
   const paid = tenders.reduce((s, t) => s + t.amount, 0);
   const remaining = Math.max(0, total - paid);
   const change = Math.max(0, paid - total);
 
-  const methods: { name: string; icon: React.ComponentType<{ className?: string }>; hint?: string }[] = [
-    { name: "نقدی", icon: Banknote },
-    { name: "کارت‌خوان", icon: CreditCard, hint: "PC-POS متصل" },
-    { name: "کیف پول", icon: Wallet },
-    { name: "کارت هدیه", icon: Gift },
-    { name: "QR / پرداخت موبایل", icon: QrCode },
-    { name: "اعتباری مشتری", icon: UserRound },
+  const methods: { method: string; label: string; icon: React.ComponentType<{ className?: string }>; hint?: string }[] = [
+    { method: "cash", label: "نقدی", icon: Banknote },
+    { method: "card", label: "کارت‌خوان", icon: CreditCard, hint: "PC-POS متصل" },
+    { method: "wallet", label: "کیف پول", icon: Wallet },
+    { method: "gift_card", label: "کارت هدیه", icon: Gift },
+    { method: "qr", label: "QR / پرداخت موبایل", icon: QrCode },
+    { method: "credit", label: "اعتباری مشتری", icon: UserRound },
   ];
 
-  const add = (name: string, icon: React.ComponentType<{ className?: string }>, portion = 1) => {
+  const add = (m: typeof methods[number], portion = 1) => {
     const amount = Math.round(remaining * portion);
     if (amount <= 0) return;
-    setTenders((prev) => [...prev, { method: name, amount, icon }]);
+    setTenders((prev) => [...prev, { method: m.method, label: m.label, amount, icon: m.icon }]);
   };
 
   return (
@@ -508,12 +548,12 @@ function PaymentModal({ total, onClose }: { total: number; onClose: () => void }
             <div className="label">روش‌های پرداخت (پرداخت ترکیبی مجاز است)</div>
             <div className="grid grid-cols-2 gap-2">
               {methods.map((m) => (
-                <button key={m.name} className="card p-3 text-right hover:border-brand-300 flex items-center gap-3" onClick={() => add(m.name, m.icon, 1)}>
+                <button key={m.method} className="card p-3 text-right hover:border-brand-300 flex items-center gap-3" onClick={() => add(m, 1)}>
                   <div className="w-9 h-9 rounded-lg bg-brand-50 text-brand-700 grid place-items-center">
                     <m.icon className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-slate-800">{m.name}</div>
+                    <div className="text-sm font-semibold text-slate-800">{m.label}</div>
                     {m.hint && <div className="text-[11px] text-slate-500">{m.hint}</div>}
                   </div>
                 </button>
@@ -522,7 +562,7 @@ function PaymentModal({ total, onClose }: { total: number; onClose: () => void }
 
             <div className="mt-4 grid grid-cols-3 gap-2">
               {[0.25, 0.5, 1].map((f) => (
-                <button key={f} className="btn-secondary" onClick={() => add("نقدی", Banknote, f)}>
+                <button key={f} className="btn-secondary" onClick={() => add(methods[0], f)}>
                   {toFa(Math.round(f * 100))}٪ نقدی
                 </button>
               ))}
@@ -537,7 +577,7 @@ function PaymentModal({ total, onClose }: { total: number; onClose: () => void }
                 {tenders.map((t, i) => (
                   <li key={i} className="flex items-center gap-2 py-2 text-sm">
                     <t.icon className="w-4 h-4 text-slate-500" />
-                    <span className="flex-1">{t.method}</span>
+                    <span className="flex-1">{t.label}</span>
                     <span className="num-fa font-semibold">{formatToman(t.amount)}</span>
                     <button className="text-rose-500 hover:text-rose-600" onClick={() => setTenders((prev) => prev.filter((_, ix) => ix !== i))}>
                       <X className="w-4 h-4" />
@@ -558,12 +598,20 @@ function PaymentModal({ total, onClose }: { total: number; onClose: () => void }
         <div className="px-5 py-4 border-t border-surface-border flex items-center justify-between">
           <div className="text-xs text-slate-500 flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-500" />
-            پرداخت ترکیبی، بازگشتی، رسید الکترونیکی و اتصال به کارت‌خوان پشتیبانی می‌شود.
+            پس از تأیید، فاکتور در سرور ثبت و از موجودی کسر می‌شود.
           </div>
           <div className="flex items-center gap-2">
             <button className="btn-secondary" onClick={onClose}>انصراف</button>
-            <button className="btn-primary" disabled={remaining > 0} onClick={onClose}>
-              <Check className="w-4 h-4" /> نهایی‌سازی فروش
+            <button
+              className="btn-primary"
+              disabled={remaining > 0 || busy}
+              onClick={async () => {
+                setBusy(true);
+                await onFinalize(tenders.map((t) => ({ method: t.method, amount: t.amount })));
+                setBusy(false);
+              }}
+            >
+              <Check className="w-4 h-4" /> {busy ? "در حال ثبت..." : "نهایی‌سازی فروش"}
             </button>
           </div>
         </div>
@@ -608,11 +656,8 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
     ["F2", "کادر جست‌وجو / اسکن"],
     ["F4", "پرداخت"],
     ["F6", "نگه‌داشتن / بازیابی سبد"],
-    ["Enter", "افزودن نتیجه اول جست‌وجو"],
+    ["Enter", "افزودن کالای منطبق با بارکد/کوئری"],
     ["+ / -", "افزایش/کاهش تعداد"],
-    ["Ctrl + D", "تخفیف روی خط"],
-    ["Ctrl + K", "پاک کردن سبد"],
-    ["Ctrl + M", "درخواست تأیید مدیر"],
     ["Esc", "بستن پنجره"],
   ];
   return (

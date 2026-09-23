@@ -1,73 +1,90 @@
-import { ModulePage } from "@/components/admin/module-page";
-import { formatToman, toFa } from "@/lib/utils";
-import { Banknote, LogIn, LogOut, PiggyBank, AlertTriangle } from "lucide-react";
+"use client";
 
-const shifts = [
-  { id: "SH-۹۸۲۱", cashier: "رضا مرادی", register: "صندوق ۱ — مرکزی", open: "۰۸:۰۰", close: "-", opening: 5_000_000, expected: 42_800_000, actual: 42_800_000, diff: 0, status: "باز" },
-  { id: "SH-۹۸۲۲", cashier: "سمیرا حسینی", register: "صندوق ۲ — مرکزی", open: "۰۸:۱۵", close: "-", opening: 5_000_000, expected: 31_400_000, actual: 31_362_000, diff: -38_000, status: "باز" },
-  { id: "SH-۹۸۲۳", cashier: "کوروش امینی", register: "صندوق ۱ — ونک", open: "۰۷:۵۰", close: "۱۶:۰۵", opening: 4_000_000, expected: 28_600_000, actual: 28_650_000, diff: 50_000, status: "بسته" },
-  { id: "SH-۹۸۲۴", cashier: "بهنام قربانی", register: "صندوق ۳ — اصفهان", open: "۰۸:۰۵", close: "-", opening: 5_000_000, expected: 22_100_000, actual: 22_100_000, diff: 0, status: "باز" },
-];
+import { TopBar } from "@/components/admin/top-bar";
+import { api, useApi, toNumber } from "@/lib/api";
+import { formatToman, toFa, jalaliDateTime } from "@/lib/utils";
+import { Banknote, LogIn, LogOut, PiggyBank, AlertTriangle, AlertCircle } from "lucide-react";
 
 export default function CashPage() {
-  return (
-    <ModulePage
-      title="مدیریت صندوق و شیفت"
-      description="مانده، برداشت، واریز، تسویه شیفت و مغایرت‌گیری"
-      metrics={[
-        { label: "شیفت‌های باز" , value: toFa(shifts.filter(s => s.status === "باز").length) },
-        { label: "مانده نقدی صندوق‌ها" , value: formatToman(125_000_000, { withUnit: false }) },
-        { label: "برداشت‌های امروز" , value: formatToman(38_000_000, { withUnit: false }) },
-        { label: "مجموع مغایرت" , value: formatToman(12_000, { withUnit: false }) },
-      ]}
-    >
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Action icon={LogIn} label="افتتاح شیفت" />
-        <Action icon={PiggyBank} label="ثبت واریز به صندوق" />
-        <Action icon={Banknote} label="برداشت / پرداخت هزینه" />
-        <Action icon={LogOut} label="بستن شیفت" />
-      </div>
+  const { data: shifts, offline, loading, refetch } = useApi("shifts", () => api.openShifts(), []);
+  const list = shifts ?? [];
 
-      <div className="card overflow-hidden">
-        <div className="overflow-auto">
-          <table className="table-clean w-full min-w-[900px]">
-            <thead>
-              <tr>
-                <th>شیفت</th>
-                <th>صندوقدار</th>
-                <th>صندوق</th>
-                <th>ساعات</th>
-                <th>افتتاحیه</th>
-                <th>مورد انتظار</th>
-                <th>موجودی واقعی</th>
-                <th>مغایرت</th>
-                <th>وضعیت</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shifts.map((s) => (
-                <tr key={s.id}>
-                  <td className="num-fa font-semibold">{s.id}</td>
-                  <td>{s.cashier}</td>
-                  <td>{s.register}</td>
-                  <td className="num-fa">{s.open} → {s.close}</td>
-                  <td className="num-fa">{formatToman(s.opening, { withUnit: false })}</td>
-                  <td className="num-fa">{formatToman(s.expected, { withUnit: false })}</td>
-                  <td className="num-fa font-bold">{formatToman(s.actual, { withUnit: false })}</td>
-                  <td className={s.diff === 0 ? "num-fa text-emerald-600" : s.diff < 0 ? "num-fa text-rose-600 font-semibold" : "num-fa text-amber-600 font-semibold"}>
-                    {s.diff === 0 ? "بدون مغایرت" : `${s.diff > 0 ? "+" : "−"}${formatToman(Math.abs(s.diff), { withUnit: false })}`}
-                    {s.diff < 0 && <AlertTriangle className="w-3.5 h-3.5 inline ms-1" />}
-                  </td>
-                  <td>
-                    {s.status === "باز" ? <span className="chip-green">باز</span> : <span className="chip-slate">بسته</span>}
-                  </td>
+  return (
+    <>
+      <TopBar title="مدیریت صندوق و شیفت" description="شیفت‌های باز و اختلاف مورد انتظار — از بک‌اند." />
+      <div className="p-6 space-y-4">
+        {offline && (
+          <div className="card p-4 bg-amber-50 border-amber-200 flex items-center gap-3 text-amber-800">
+            <AlertCircle className="w-5 h-5" />
+            <div className="flex-1 text-sm">اتصال به بک‌اند برقرار نیست.</div>
+            <button className="btn-secondary" onClick={() => refetch()}>تلاش مجدد</button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Card title="شیفت‌های باز" value={toFa(list.length)} />
+          <Card title="جمع مانده نقدی مورد انتظار" value={formatToman(list.reduce((s, x) => s + toNumber(x.expected_cash), 0), { withUnit: false })} />
+          <Card title="جمع افتتاحیه صندوق‌ها" value={formatToman(list.reduce((s, x) => s + toNumber(x.opening_cash), 0), { withUnit: false })} />
+          <Card title="اختلاف تجمعی" value={formatToman(list.reduce((s, x) => s + toNumber(x.difference), 0), { withUnit: false })} />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Action icon={LogIn} label="افتتاح شیفت" />
+          <Action icon={PiggyBank} label="ثبت واریز به صندوق" />
+          <Action icon={Banknote} label="برداشت / پرداخت هزینه" />
+          <Action icon={LogOut} label="بستن شیفت" />
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="overflow-auto">
+            <table className="table-clean w-full min-w-[900px]">
+              <thead>
+                <tr>
+                  <th>شیفت</th>
+                  <th>صندوق</th>
+                  <th>شعبه</th>
+                  <th>افتتاحیه</th>
+                  <th>مورد انتظار</th>
+                  <th>شمارش‌شده</th>
+                  <th>اختلاف</th>
+                  <th>باز‌شده</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading && <tr><td colSpan={8} className="text-center text-slate-400 py-8">در حال بارگذاری...</td></tr>}
+                {!loading && list.length === 0 && (
+                  <tr><td colSpan={8} className="text-center text-slate-400 py-8">در حال حاضر شیفت بازی وجود ندارد.</td></tr>
+                )}
+                {list.map((s) => (
+                  <tr key={s.id}>
+                    <td className="num-fa font-semibold">{s.code}</td>
+                    <td className="num-fa">#{toFa(s.register_id)}</td>
+                    <td className="num-fa">#{toFa(s.branch_id)}</td>
+                    <td className="num-fa">{formatToman(toNumber(s.opening_cash), { withUnit: false })}</td>
+                    <td className="num-fa">{formatToman(toNumber(s.expected_cash), { withUnit: false })}</td>
+                    <td className="num-fa font-bold">{formatToman(toNumber(s.counted_cash), { withUnit: false })}</td>
+                    <td className={toNumber(s.difference) < 0 ? "num-fa text-rose-600 font-semibold" : "num-fa text-slate-600"}>
+                      {formatToman(toNumber(s.difference), { withUnit: false })}
+                      {toNumber(s.difference) < 0 && <AlertTriangle className="w-3.5 h-3.5 inline ms-1" />}
+                    </td>
+                    <td className="num-fa">{jalaliDateTime(new Date(s.opened_at))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </ModulePage>
+    </>
+  );
+}
+
+function Card({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="card p-4">
+      <div className="text-xs text-slate-500">{title}</div>
+      <div className="mt-1 font-bold text-slate-900 num-fa">{value}</div>
+    </div>
   );
 }
 

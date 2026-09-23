@@ -1,66 +1,89 @@
-import { ModulePage } from "@/components/admin/module-page";
-import { formatToman, toFa } from "@/lib/utils";
-import { FileText, PackageCheck, Plus } from "lucide-react";
+"use client";
 
-const orders = [
-  { id: "PO-۲۰۱۸", supplier: "شرکت پگاه شمال", items: 42, total: 128_500_000, status: "تحویل کامل", eta: "۱۴۰۳/۱۲/۱۱" },
-  { id: "PO-۲۰۱۹", supplier: "کاله آمل", items: 28, total: 74_200_000, status: "دریافت جزئی", eta: "۱۴۰۳/۱۲/۱۳" },
-  { id: "PO-۲۰۲۰", supplier: "چی‌توز البرز", items: 60, total: 92_000_000, status: "در انتظار", eta: "۱۴۰۳/۱۲/۱۸" },
-  { id: "PO-۲۰۲۱", supplier: "کوکاکولا ایران", items: 120, total: 210_000_000, status: "در انتظار", eta: "۱۴۰۳/۱۲/۲۰" },
-];
+import { TopBar } from "@/components/admin/top-bar";
+import { api, useApi, toNumber } from "@/lib/api";
+import { formatToman, toFa } from "@/lib/utils";
+import { FileText, PackageCheck, Plus, AlertCircle } from "lucide-react";
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: "پیش‌نویس", approved: "تأیید شده", partial: "دریافت جزئی",
+  received: "تحویل کامل", cancelled: "لغو شده",
+};
 
 export default function PurchasesPage() {
+  const { data: orders, offline, loading, refetch } = useApi("purchases", () => api.listPurchases(), []);
+  const items = orders ?? [];
+
   return (
-    <ModulePage
-      title="خرید و فاکتور تأمین"
-      description="سفارش خرید، رسید کالا، فاکتور تأمین و پرداخت"
-      metrics={[
-        { label: "سفارش خرید فعال" , value: toFa(23) },
-        { label: "ارزش در گردش" , value: formatToman(1_842_000_000, { withUnit: false }) },
-        { label: "دریافت‌های امروز" , value: toFa(7) },
-        { label: "پرداخت‌های سررسید" , value: toFa(4) },
-      ]}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        <div className="flex-1" />
-        <button className="btn-secondary"><PackageCheck className="w-4 h-4" /> ثبت رسید</button>
-        <button className="btn-primary"><Plus className="w-4 h-4" /> سفارش خرید جدید</button>
-      </div>
-      <div className="card overflow-hidden">
-        <div className="overflow-auto">
-          <table className="table-clean w-full min-w-[800px]">
-            <thead>
-              <tr>
-                <th>شناسه</th>
-                <th>تأمین‌کننده</th>
-                <th>اقلام</th>
-                <th>مبلغ</th>
-                <th>تاریخ تحویل</th>
-                <th>وضعیت</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id}>
-                  <td className="num-fa font-semibold flex items-center gap-2"><FileText className="w-4 h-4 text-slate-400" /> {o.id}</td>
-                  <td>{o.supplier}</td>
-                  <td className="num-fa">{toFa(o.items)}</td>
-                  <td className="num-fa font-bold">{formatToman(o.total, { withUnit: false })}</td>
-                  <td className="num-fa">{o.eta}</td>
-                  <td>
-                    <span className={
-                      o.status === "تحویل کامل" ? "chip-green" :
-                      o.status === "دریافت جزئی" ? "chip-amber" : "chip-blue"
-                    }>{o.status}</span>
-                  </td>
-                  <td className="!text-left"><button className="btn-ghost text-xs">جزئیات</button></td>
+    <>
+      <TopBar title="خرید و فاکتور تأمین" description="سفارش‌های خرید ثبت‌شده در بک‌اند." />
+      <div className="p-6 space-y-4">
+        {offline && (
+          <div className="card p-4 bg-amber-50 border-amber-200 flex items-center gap-3 text-amber-800">
+            <AlertCircle className="w-5 h-5" />
+            <div className="flex-1 text-sm">اتصال به بک‌اند برقرار نیست.</div>
+            <button className="btn-secondary" onClick={() => refetch()}>تلاش مجدد</button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <Card title="سفارش خرید" value={toFa(items.length)} />
+          <Card title="ارزش در گردش" value={formatToman(items.reduce((s, o) => s + toNumber(o.total), 0), { withUnit: false })} />
+          <Card title="در انتظار" value={toFa(items.filter((o) => o.status === "approved").length)} />
+          <Card title="تحویل کامل" value={toFa(items.filter((o) => o.status === "received").length)} />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex-1" />
+          <button className="btn-secondary" disabled><PackageCheck className="w-4 h-4" /> ثبت رسید</button>
+          <button className="btn-primary" disabled><Plus className="w-4 h-4" /> سفارش خرید جدید</button>
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="overflow-auto">
+            <table className="table-clean w-full min-w-[700px]">
+              <thead>
+                <tr>
+                  <th>شماره</th>
+                  <th>تأمین‌کننده</th>
+                  <th>اقلام</th>
+                  <th>مبلغ</th>
+                  <th>وضعیت</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading && <tr><td colSpan={5} className="text-center text-slate-400 py-8">در حال بارگذاری...</td></tr>}
+                {!loading && items.length === 0 && (
+                  <tr><td colSpan={5} className="text-center text-slate-400 py-8">هنوز سفارش خریدی ثبت نشده.</td></tr>
+                )}
+                {items.map((o) => (
+                  <tr key={o.id}>
+                    <td className="num-fa font-semibold flex items-center gap-2"><FileText className="w-4 h-4 text-slate-400" /> {o.number}</td>
+                    <td className="num-fa">#{toFa(o.supplier_id)}</td>
+                    <td className="num-fa">{toFa(o.items.length)}</td>
+                    <td className="num-fa font-bold">{formatToman(toNumber(o.total), { withUnit: false })}</td>
+                    <td>
+                      <span className={
+                        o.status === "received" ? "chip-green" :
+                        o.status === "partial" ? "chip-amber" : "chip-blue"
+                      }>{STATUS_LABEL[o.status] ?? o.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </ModulePage>
+    </>
+  );
+}
+
+function Card({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="card p-4">
+      <div className="text-xs text-slate-500">{title}</div>
+      <div className="mt-1 font-bold text-slate-900 num-fa">{value}</div>
+    </div>
   );
 }
