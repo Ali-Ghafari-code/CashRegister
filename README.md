@@ -36,12 +36,72 @@ CashRegister/
 
 ## پیش‌نیاز
 
-- **Docker Desktop** برای ویندوز/مک/لینوکس (توصیه‌شده)  
-یا برای اجرای دستی:
-- **Node.js 20+** و **npm** برای فرانت
-- **Python 3.12+** و **MySQL 8** برای بک‌اند
+- **MySQL 8** نصب و در حال اجرا روی `localhost:3306`
+- **Python 3.12+** — بررسی: `python --version`
+- **Node.js 20+** — بررسی: `node --version`
+- (اختیاری) **Docker Desktop** اگر می‌خواهید همه چیز داخل کانتینر باشد
 
-## اجرای همه‌چیز با یک دستور (Docker)
+## اجرای بدون Docker روی ویندوز — پیشنهادی
+
+اگر MySQL خودتان را دارید و می‌خواهید Docker نصب نکنید:
+
+### گام ۱ — دیتابیس (فقط یک بار)
+
+اگر هنوز کاربر و دیتابیس نساخته‌اید، این را داخل MySQL اجرا کنید (از phpMyAdmin یا CMD):
+
+```sql
+CREATE DATABASE cashregister CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'cashregister'@'localhost' IDENTIFIED BY 'cashregister';
+GRANT ALL ON cashregister.* TO 'cashregister'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+یا از فایل آماده استفاده کنید:
+
+```powershell
+mysql -u root -p < backend\scripts\init_mysql.sql
+```
+
+اگر یوزر/پسورد/نام دیتابیس متفاوتی دارید، متغیرهای زیر را قبل از اجرای اسکریپت‌ها ست کنید:
+
+```powershell
+$env:CR_DB_USER = "myuser"
+$env:CR_DB_PASS = "mypass"
+$env:CR_DB_NAME = "mydb"
+```
+
+### گام ۲ — نصب و مایگریشن (فقط یک بار)
+
+از پوشه ریشه پروژه (`D:\assets\CashRegister`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1
+```
+
+این:
+
+- venv پایتون می‌سازد در `backend\.venv`
+- وابستگی‌های `requirements.txt` را نصب می‌کند
+- `alembic upgrade head` — همه جدول‌ها را می‌سازد
+- `scripts/seed.py` — داده اولیه فارسی: ۵ شعبه، ۱۸ محصول، ۵ مشتری، ۵ تأمین‌کننده، ۶ کارمند و کاربر ادمین
+- `npm install` روی فرانت
+
+### گام ۳ — اجرای سرورها
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run.ps1
+```
+
+دو پنجره PowerShell باز می‌شود:
+
+- یکی: بک‌اند FastAPI روی <http://localhost:8000> (Swagger روی `/docs`)
+- یکی: فرانت Next.js روی <http://localhost:3000>
+
+**ورود:** `admin` / `admin123` — یا PIN صندوقدار `0000`
+
+---
+
+## اجرای همه‌چیز با یک دستور (Docker — اختیاری)
 
 پس از نصب Docker Desktop، در پوشه پروژه (مثل `D:\assets\CashRegister`) اجرا کنید:
 
